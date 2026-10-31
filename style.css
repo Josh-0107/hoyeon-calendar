@@ -42,6 +42,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .cell.out { opacity: .35; }
 .cell.sel { background: #1f2330; }
 .num { font-size: 12px; padding: 1px 3px; display: flex; gap: 3px; align-items: baseline; white-space: nowrap; overflow: hidden; }
+.num .term { font-size: 9px; color: var(--muted); }
 .num .hol { font-size: 9px; color: var(--sun); overflow: hidden; text-overflow: ellipsis; }
 .cell.d0 .num b, .cell.hol .num b { color: var(--sun); }
 .cell.d6 .num b { color: var(--sat); }

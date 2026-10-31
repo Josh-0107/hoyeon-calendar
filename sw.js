@@ -1,5 +1,5 @@
 // 앱 껍데기만 캐시해요. 일정은 항상 구글에서 새로 받아요.
-const CACHE = 'hoyeon-v1';
+const CACHE = 'hoyeon-v2';
 const SHELL = ['./', 'index.html', 'style.css', 'app.js', 'config.js', 'manifest.webmanifest', 'icons/icon-192.png'];
 self.addEventListener('install', (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())));
 self.addEventListener('activate', (e) => e.waitUntil(

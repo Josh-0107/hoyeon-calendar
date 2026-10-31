@@ -9,6 +9,7 @@ const COLOR_ID = { vp: '9', fp: '1', fn: '5', on: '6', bd: '4' };
 const GROUP_LABEL = { school: '학교', job: '알바' };
 const OWNER_LABEL = { bass: '베이스', tennis: '테니스', english: '영어', structure: '구조', mind: '마음', learnus: '런어스' };
 const HOLIDAYS = { '2026-12-25': '성탄절', '2027-01-01': '신정' };
+const TERMS = { '2026-11-07': '입동', '2026-11-22': '소설', '2026-12-07': '대설', '2026-12-22': '동지' };
 const MAX_CHIPS = 4;
 
 const $ = (s) => document.querySelector(s);
@@ -140,7 +141,8 @@ function render() {
     const cell = document.createElement('div');
     cell.className = `cell d${d.getDay()}` + (d.getMonth() !== state.month ? ' out' : '') +
       (key === todayKey ? ' today' : '') + (key === state.selected ? ' sel' : '') + (HOLIDAYS[key] ? ' hol' : '');
-    cell.innerHTML = `<div class="num"><b>${d.getDate()}</b>${HOLIDAYS[key] ? `<span class="hol">${HOLIDAYS[key]}</span>` : ''}</div>`;
+    const mark = HOLIDAYS[key] ? `<span class="hol">${HOLIDAYS[key]}</span>` : TERMS[key] ? `<span class="term">${TERMS[key]}</span>` : '';
+    cell.innerHTML = `<div class="num"><b>${d.getDate()}</b>${mark}</div>`;
     const chips = monthChips((byDay[key] || []).sort(byTime));
     chips.slice(0, MAX_CHIPS).forEach((c) => cell.appendChild(c));
     if (chips.length > MAX_CHIPS) cell.insertAdjacentHTML('beforeend', `<span class="more">+${chips.length - MAX_CHIPS}</span>`);
@@ -315,6 +317,7 @@ async function applyException(eventId, x) {
     timeMax: new Date(x.date + 'T23:59:59+09:00').toISOString() });
   const res = await api(`${calPath()}/events/${encodeURIComponent(eventId)}/instances?${q}`);
   for (const inst of res.items) {
+    if (x.cancel) { await api(`${calPath()}/events/${encodeURIComponent(inst.id)}`, { method: 'DELETE' }); continue; }
     await api(`${calPath()}/events/${encodeURIComponent(inst.id)}`, { method: 'PATCH', body: JSON.stringify({
       start: { dateTime: `${x.date}T${x.start}:00`, timeZone: TZ },
       end: { dateTime: `${x.date}T${x.end}:00`, timeZone: TZ } }) });
