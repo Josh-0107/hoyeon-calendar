@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#121316">
+<title>호연 캘린더</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <button id="prev" class="nav" aria-label="이전 달">‹</button>
+  <h1 id="title"></h1>
+  <button id="next" class="nav" aria-label="다음 달">›</button>
+  <button id="today" class="pill">오늘</button>
+  <button id="login" class="pill accent" hidden>구글 연결</button>
+  <button id="seed" class="pill" hidden>초기 일정 넣기</button>
+</header>
+
+<div class="dow"><span class="sun">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span class="sat">토</span></div>
+<main id="grid" class="grid"></main>
+<div id="status" class="status"></div>
+
+<section id="sheet" class="sheet" hidden>
+  <div class="sheet-head">
+    <h2 id="sheet-title"></h2>
+    <button id="add" class="pill accent">+ 추가</button>
+    <button id="sheet-close" class="nav" aria-label="닫기">×</button>
+  </div>
+  <ul id="day-list" class="day-list"></ul>
+</section>
+
+<dialog id="form-dialog">
+  <form id="form" method="dialog">
+    <h2 id="form-title">일정</h2>
+    <label>제목 <input name="summary" required autocomplete="off"></label>
+    <label>날짜 <input name="date" type="date" required></label>
+    <label class="row"><input name="allDay" type="checkbox"> 하루 종일</label>
+    <div class="row times">
+      <label>시작 <input name="start" type="time" value="19:00"></label>
+      <label>끝 <input name="end" type="time" value="21:00"></label>
+    </div>
+    <fieldset id="q-person">
+      <legend>사람과 관련 있나?</legend>
+      <label><input type="radio" name="person" value="1"> 예</label>
+      <label><input type="radio" name="person" value="0" checked> 아니오</label>
+    </fieldset>
+    <fieldset id="q-repeat">
+      <legend>반복되나?</legend>
+      <label><input type="radio" name="repeat" value="1"> 예</label>
+      <label><input type="radio" name="repeat" value="0" checked> 아니오</label>
+    </fieldset>
+    <div id="repeat-opts" class="row" hidden>
+      <select name="freq">
+        <option value="WEEKLY">매주</option>
+        <option value="BIWEEKLY">격주</option>
+        <option value="MONTHLY">매월</option>
+        <option value="YEARLY">매년</option>
+      </select>
+      <label>끝 <input name="until" type="date" value="2026-12-31"></label>
+    </div>
+    <p id="instance-note" class="note" hidden>반복 일정이에요. 이 날짜만 바뀌어요.</p>
+    <p class="note">색: <span id="type-preview" class="chip"></span></p>
+    <div class="actions">
+      <button type="button" id="delete" class="pill danger" hidden>삭제</button>
+      <span class="spacer"></span>
+      <button type="button" id="cancel" class="pill">취소</button>
+      <button type="submit" class="pill accent">저장</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="config.js"></script>
+<script src="seed.js" onerror="this.remove()"></script>
+<script src="app.js"></script>
+<script src="https://accounts.google.com/gsi/client" async onload="onGisLoad()"></script>
+</body>
+</html>
