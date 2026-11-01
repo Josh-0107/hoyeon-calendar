@@ -15,6 +15,7 @@
   --bd: #ff7eb6;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; }
 body { overflow-x: hidden;
   background: var(--bg); color: var(--text);

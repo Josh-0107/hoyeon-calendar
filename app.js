@@ -1,7 +1,7 @@
 // 호연 캘린더: 구글 캘린더를 저장소로 쓰는 월간 보기 PWA ('캘린더 구상' MVP)
 const CONFIG = window.HOYEON_CONFIG || {};
-const SCOPE = 'https://www.googleapis.com/auth/calendar';
-const API = 'https://www.googleapis.com/calendar/v3';
+// 서버(calendar-api)가 구글 장기 토큰을 갖고 있어서 앱은 처음 한 번만 연결해요
+const API = (CONFIG.apiBase || '').replace(/\/$/, '');
 const TZ = 'Asia/Seoul';
 const CAL_NAME = '호연';
 // 구글 앱에서도 비슷하게 보이도록: vp 블루베리, fp 라벤더, fn 바나나, on 귤, bd 플라밍고
@@ -14,7 +14,7 @@ const MAX_CHIPS = 4;
 
 const $ = (s) => document.querySelector(s);
 const state = {
-  token: load('token'),
+  session: load('session'),
   calId: load('calId'),
   year: 0, month: 0,
   events: [],
@@ -35,46 +35,42 @@ const hm = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 const shortTime = (d) => d.getMinutes() ? `${d.getHours()}:${pad(d.getMinutes())}` : `${d.getHours()}`;
 const DOW = ['일', '월', '화', '수', '목', '금', '토'];
 
-// ---------- 인증 ----------
-let tokenClient = null;
-function onGisLoad() {
-  if (!CONFIG.clientId) { setStatus('config.js에 clientId를 넣어 주세요'); return; }
-  tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: CONFIG.clientId,
-    scope: SCOPE,
-    hint: CONFIG.loginHint,
-    callback: (resp) => {
-      if (resp.error) { setStatus('연결 실패: ' + resp.error); showLogin(true); return; }
-      state.token = { access_token: resp.access_token, exp: Date.now() + (resp.expires_in - 60) * 1000 };
-      save('token', state.token);
-      showLogin(false);
-      start();
-    },
-  });
-  if (tokenValid()) start();
-  else if (state.token) tokenClient.requestAccessToken({ prompt: '' }); // 전에 허용했으면 조용히 다시 받음
-  else showLogin(true);
+// ---------- 연결 ----------
+// 서버 로그인에서 돌아오면 주소의 #session=… 을 저장해요
+function takeSessionFromUrl() {
+  const m = location.hash.match(/session=([0-9a-f]+)/);
+  if (!m) return;
+  state.session = m[1];
+  save('session', m[1]);
+  history.replaceState(null, '', location.pathname + location.search);
 }
-const tokenValid = () => state.token && state.token.exp > Date.now();
+function connect() { location.href = `${API}/auth/start?return=${encodeURIComponent(location.href.split('#')[0])}`; }
 function showLogin(on) { $('#login').hidden = !on; }
 
 async function api(path, opts = {}) {
-  if (!tokenValid()) { showLogin(true); throw new Error('로그인이 필요해요'); }
-  const res = await fetch(API + path, {
+  if (!state.session) { showLogin(true); throw new Error('구글 연결을 한 번 눌러 주세요'); }
+  const res = await fetch(API + '/api' + path, {
     ...opts,
-    headers: { Authorization: 'Bearer ' + state.token.access_token, 'Content-Type': 'application/json' },
+    headers: { Authorization: 'Bearer ' + state.session, 'Content-Type': 'application/json' },
   });
-  if (res.status === 401) { state.token = null; save('token', null); showLogin(true); throw new Error('다시 연결해 주세요'); }
+  if (res.status === 401) { state.session = null; save('session', null); showLogin(true); throw new Error('연결이 끊겼어요. 구글 연결을 다시 눌러 주세요'); }
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
   return res.status === 204 ? null : res.json();
 }
 
-// '호연' 캘린더를 찾고, 없으면 만들어요
+// '호연' 캘린더를 찾고, 없으면 만들어요. 표시(hoyeon-ax)가 있는 걸 먼저, 여러 개면 일정이 있는 쪽
 async function ensureCalendar() {
-  if (state.calId) return state.calId;
   const list = await api('/users/me/calendarList?minAccessRole=owner');
-  let cal = list.items.find((c) => c.summary === CAL_NAME);
-  if (!cal) cal = await api('/calendars', { method: 'POST', body: JSON.stringify({ summary: CAL_NAME, timeZone: TZ }) });
+  const named = list.items.filter((c) => c.summary === CAL_NAME);
+  let cal = named.find((c) => (c.description || '').includes('hoyeon-ax'));
+  if (!cal && named.length > 1) {
+    for (const c of named) {
+      const r = await api('/calendars/' + encodeURIComponent(c.id) + '/events?maxResults=1');
+      if (r.items.length) { cal = c; break; }
+    }
+  }
+  cal = cal || named[0];
+  if (!cal) cal = await api('/calendars', { method: 'POST', body: JSON.stringify({ summary: CAL_NAME, description: 'hoyeon-ax', timeZone: TZ }) });
   state.calId = cal.id;
   save('calId', cal.id);
   return cal.id;
@@ -114,14 +110,32 @@ function visibleRange() {
   return { start, end: addDays(start, weeks * 7), weeks };
 }
 
+const monthKey = () => `ev.${state.year}-${pad(state.month + 1)}`;
 async function fetchEvents() {
   const { start, end } = visibleRange();
   const q = new URLSearchParams({ timeMin: start.toISOString(), timeMax: end.toISOString(),
     singleEvents: 'true', orderBy: 'startTime', maxResults: '2500', timeZone: TZ });
   setStatus('불러오는 중…');
   const res = await api(`${calPath()}/events?${q}`);
-  state.events = res.items.filter((e) => e.status !== 'cancelled').map(norm);
-  setStatus('');
+  const items = res.items.filter((e) => e.status !== 'cancelled');
+  state.events = items.map(norm);
+  save(monthKey(), { at: Date.now(), items });
+  setStatus(`동기화 ${hm(new Date())} · 이번 화면 ${items.length}개`);
+}
+// 마지막으로 받은 일정을 먼저 보여 줘요 (연결 전·오프라인에도 빈 화면이 안 되게)
+function cachedNote() {
+  const c = load(monthKey());
+  return c ? `저장된 일정 · 마지막 동기화 ${new Date(c.at).getMonth() + 1}/${new Date(c.at).getDate()} ${hm(new Date(c.at))}` : '';
+}
+function loadCached() {
+  const c = load(monthKey());
+  state.events = c ? c.items.map(norm) : [];
+  setStatus(cachedNote());
+}
+// 연결 실패는 저장된 일정 안내와 함께 보여 줘요
+function showError(err) {
+  const msg = err instanceof TypeError ? '서버에 연결하지 못했어요' : err.message;
+  setStatus([cachedNote(), msg].filter(Boolean).join(' · '));
 }
 
 // ---------- 그리기 ----------
@@ -327,18 +341,26 @@ async function applyException(eventId, x) {
 // ---------- 시작 ----------
 function setStatus(s) { $('#status').textContent = s; }
 async function refresh() {
-  try { await fetchEvents(); } catch (err) { setStatus(err.message); }
+  loadCached();
   render();
+  if (!state.session || !state.calId) return;
+  try { await fetchEvents(); render(); } catch (err) { showError(err); }
 }
 async function start() {
-  try { await ensureCalendar(); } catch (err) { setStatus(err.message); return; }
-  $('#seed').hidden = !window.HOYEON_SEED;
-  await refresh();
+  takeSessionFromUrl();
+  showLogin(!state.session);
+  await refresh(); // 저장된 일정 먼저
+  if (!state.session) return;
+  try {
+    await ensureCalendar();
+    $('#seed').hidden = !window.HOYEON_SEED;
+    await refresh();
+  } catch (err) { showError(err); }
 }
 function go(delta) {
   const d = new Date(state.year, state.month + delta, 1);
   state.year = d.getFullYear(); state.month = d.getMonth();
-  if (tokenValid()) refresh(); else render();
+  refresh();
 }
 
 (function init() {
@@ -349,10 +371,10 @@ function go(delta) {
   $('#prev').onclick = () => go(-1);
   $('#next').onclick = () => go(1);
   $('#today').onclick = () => { const n = new Date(); state.year = n.getFullYear(); state.month = n.getMonth(); state.selected = ymd(n); go(0); $('#sheet').hidden = false; };
-  $('#login').onclick = () => tokenClient && tokenClient.requestAccessToken({ prompt: state.token ? '' : 'consent' });
+  $('#login').onclick = connect;
   $('#seed').onclick = () => runSeed().catch((err) => setStatus('초기 일정 실패: ' + err.message));
   $('#add').onclick = () => openForm(null);
   $('#sheet-close').onclick = () => { state.selected = null; $('#sheet').hidden = true; render(); };
-  render();
+  start();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 })();
